@@ -1,0 +1,133 @@
+<?php
+
+/**
+ * Module file for Field display per theme module.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function field_display_per_theme_menu() {
+  $items = array();
+
+  // Ensure the following is not executed until field_bundles is working and
+  // tables are updated. Needed to avoid errors on initial installation.
+  if (defined('MAINTENANCE_MODE')) {
+    return $items;
+  }
+
+  // Override field display tab for each theme.
+  foreach (list_themes() as $theme) {
+    $items['admin/appearance/settings/' . $theme->name . '/field-display'] = array(
+      'title' => 'Override field display',
+      'page callback' => 'system_admin_menu_block_page',
+      'type' => MENU_NORMAL_ITEM,
+      'access callback' => 'field_display_per_theme_access',
+      'access arguments' => array($theme),
+      'file path' => drupal_get_path('module', 'system'),
+      'file' => 'system.admin.inc',
+    );
+
+    // The following is based on field_ui_menu().
+
+    // Create tabs for all possible bundles.
+    foreach (entity_get_info() as $entity_type => $entity_info) {
+      if ($entity_info['fieldable']) {
+
+        $items['admin/appearance/settings/' . $theme->name . '/field-display/' . $entity_type] = array(
+          'title' => 'Override field display',
+          'title callback' => 'field_display_per_theme_title_callback',
+          'title arguments' => array($entity_info['label'], $theme->info['name']),
+          'type' => MENU_NORMAL_ITEM,
+          'access callback' => 'field_display_per_theme_access',
+          'access arguments' => array($theme),
+        );
+
+        // I can't seem to get the menu system to work with the above as a
+        // default local task, so we make it a redirect to the first-selected
+        // bundle tab.
+        if (!empty($entity_info['bundles'])) {
+          $bundle_names = array_keys($entity_info['bundles']);
+          $first_bundle = reset($bundle_names);
+          $items['admin/appearance/settings/' . $theme->name . '/field-display/' . $entity_type] += array(
+            'page callback' => 'drupal_goto',
+            'page arguments' => array('admin/appearance/settings/' . $theme->name . '/field-display/' . $entity_type . '/' . $first_bundle),
+          );
+        }
+
+        $weight = 0;
+        foreach ($entity_info['bundles'] as $bundle_name => $bundle_info) {
+          if (isset($bundle_info['admin'])) {
+
+            $bundle_arg = 6;
+            $access = array_intersect_key($bundle_info['admin'], drupal_map_assoc(array('access callback', 'access arguments')));
+            $access += array(
+              'access callback' => 'user_access',
+              'access arguments' => array('administer site configuration'),
+            );
+
+            $items['admin/appearance/settings/' . $theme->name . '/field-display/' . $entity_type . '/' . $bundle_name] = array(
+              'title' => $bundle_info['label'],
+              'page callback' => 'drupal_get_form',
+              'page arguments' => array('field_ui_display_overview_form', $entity_type, $bundle_arg, 'default'),
+              'type' => MENU_LOCAL_TASK,
+              'file path' => drupal_get_path('module', 'field_ui'),
+              'file' => 'field_ui.admin.inc',
+              'weight' => $weight++,
+            ) + $access;
+
+            $view_mode_weight = 0;
+            $view_modes = array('default' => array('label' => t('Default'))) + $entity_info['view modes'];
+            foreach ($view_modes as $view_mode => $view_mode_info) {
+
+              $items['admin/appearance/settings/' . $theme->name . '/field-display/' . $entity_type . '/' . $bundle_name . '/' . $view_mode] = array(
+                'title' => $view_mode_info['label'],
+                'page arguments' => array('field_ui_display_overview_form', $entity_type, $bundle_arg, $view_mode),
+                // The access callback needs to check both the current 'custom
+                // display' setting for the view mode, and the overall access
+                // rules for the bundle admin pages.
+                'access callback' => '_field_ui_view_mode_menu_access',
+                'access arguments' => array_merge(array($entity_type, $bundle_arg, $view_mode, $access['access callback']), $access['access arguments']),
+                'type' => ($view_mode == 'default' ? MENU_DEFAULT_LOCAL_TASK : MENU_LOCAL_TASK),
+                'weight' => ($view_mode == 'default' ? -10 : $view_mode_weight++),
+                'file path' => drupal_get_path('module', 'field_ui'),
+                'file' => 'field_ui.admin.inc',
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return $items;
+}
+
+/**
+ * Menu title callback.
+ *
+ * @param $entity_type_label
+ * @param $theme_label
+ *
+ * @return null|string
+ */
+function field_display_per_theme_title_callback($entity_type_label, $theme_label) {
+  // Keep it simple on the listing page.
+  if (current_path() === 'admin/appearance/settings/bartik/field-display') {
+    return check_plain($entity_type_label);
+  }
+  else {
+    return t('Override @entity_type_label field display in @theme_name', array('@entity_type_label' => $entity_type_label, '@theme_name' => $theme_label));
+  }
+}
+
+/**
+ * Determine if the current user has access to the field display overrides
+ * page on a certain theme.
+ *
+ * @param $theme
+ * @return bool
+ */
+function field_display_per_theme_access($theme) {
+  return _system_themes_access($theme) && user_access('administer site configuration');
+}
