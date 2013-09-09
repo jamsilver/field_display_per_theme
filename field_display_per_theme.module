@@ -2,6 +2,20 @@
 
 /**
  * Module file for Field display per theme module.
+ *
+ * @TODO
+ *   1. Replace field_ui display form constructor so other modules don't
+ *      alter themselves in for free
+ *   2. Field UI javascript replacement
+ *   3. Replace refresh & submit submit handlers
+ *   4. Hide 'default' view mode in overrides - doesn't make sense?
+ *   5. Replace 'Custom display settings' with table, lock rows which are
+ *      customly configurable in the base view mode already?
+ *   6. Database table, or similar, for storage
+ *   7. Features integration
+ *   8. Export-to-a-theme functionality
+ *   9. field_group integration
+ *   10.
  */
 
 /**
@@ -37,7 +51,7 @@ function field_display_per_theme_menu() {
         $items['admin/appearance/settings/' . $theme->name . '/field-display/' . $entity_type] = array(
           'title' => 'Override field display',
           'title callback' => 'field_display_per_theme_title_callback',
-          'title arguments' => array($entity_info['label'], $theme->info['name']),
+          'title arguments' => array($theme->name, $entity_info['label'], $theme->info['name']),
           'type' => MENU_NORMAL_ITEM,
           'access callback' => 'field_display_per_theme_access',
           'access arguments' => array($theme),
@@ -68,11 +82,10 @@ function field_display_per_theme_menu() {
 
             $items['admin/appearance/settings/' . $theme->name . '/field-display/' . $entity_type . '/' . $bundle_name] = array(
               'title' => $bundle_info['label'],
-              'page callback' => 'drupal_get_form',
-              'page arguments' => array('field_ui_display_overview_form', $entity_type, $bundle_arg, 'default'),
+              'page callback' => 'field_display_per_theme_display_overview_page',
+              'page arguments' => array($theme->name, $entity_type, $bundle_arg, 'default'),
               'type' => MENU_LOCAL_TASK,
-              'file path' => drupal_get_path('module', 'field_ui'),
-              'file' => 'field_ui.admin.inc',
+              'file' => 'field_display_per_theme.admin.inc',
               'weight' => $weight++,
             ) + $access;
 
@@ -82,7 +95,7 @@ function field_display_per_theme_menu() {
 
               $items['admin/appearance/settings/' . $theme->name . '/field-display/' . $entity_type . '/' . $bundle_name . '/' . $view_mode] = array(
                 'title' => $view_mode_info['label'],
-                'page arguments' => array('field_ui_display_overview_form', $entity_type, $bundle_arg, $view_mode),
+                'page arguments' => array($theme->name, $entity_type, $bundle_arg, $view_mode),
                 // The access callback needs to check both the current 'custom
                 // display' setting for the view mode, and the overall access
                 // rules for the bundle admin pages.
@@ -90,8 +103,7 @@ function field_display_per_theme_menu() {
                 'access arguments' => array_merge(array($entity_type, $bundle_arg, $view_mode, $access['access callback']), $access['access arguments']),
                 'type' => ($view_mode == 'default' ? MENU_DEFAULT_LOCAL_TASK : MENU_LOCAL_TASK),
                 'weight' => ($view_mode == 'default' ? -10 : $view_mode_weight++),
-                'file path' => drupal_get_path('module', 'field_ui'),
-                'file' => 'field_ui.admin.inc',
+                'file' => 'field_display_per_theme.admin.inc',
               );
             }
           }
@@ -104,16 +116,31 @@ function field_display_per_theme_menu() {
 }
 
 /**
+ * Implements hook_forms().
+ */
+function field_display_per_theme_forms($form_id, $args) {
+  $forms = array();
+
+  $forms['field_display_per_theme_display_overview_form'] = array(
+    'callback' => 'field_ui_display_overview_form',
+    'wrapper_callback' => 'field_display_per_theme_display_overview_form_wrapper',
+  );
+
+  return $forms;
+}
+
+/**
  * Menu title callback.
  *
+ * @param $theme_key
  * @param $entity_type_label
  * @param $theme_label
  *
  * @return null|string
  */
-function field_display_per_theme_title_callback($entity_type_label, $theme_label) {
+function field_display_per_theme_title_callback($theme_key, $entity_type_label, $theme_label) {
   // Keep it simple on the listing page.
-  if (current_path() === 'admin/appearance/settings/bartik/field-display') {
+  if (current_path() === 'admin/appearance/settings/' . $theme_key . '/field-display') {
     return check_plain($entity_type_label);
   }
   else {
@@ -130,4 +157,32 @@ function field_display_per_theme_title_callback($entity_type_label, $theme_label
  */
 function field_display_per_theme_access($theme) {
   return _system_themes_access($theme) && user_access('administer site configuration');
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Detects our special version of the Manage Display form and alters it.
+ */
+function field_display_per_theme_form_field_ui_display_overview_form_alter(&$form, &$form_state) {
+  if (isset($form_state['field_display_per_theme'])) {
+    // No need to call form_load_include() here because our admin.inc file is
+    // already included and logged in $form_state by the Drupal menu system.
+    _field_display_per_theme_form_field_ui_display_overview_form_alter($form, $form_state);
+  }
+}
+
+/**
+ * Loads our override field display config.
+ */
+function field_display_per_theme_config_load() {
+  return array(
+    'field_image' => array(
+      'label' => 'above',
+      'settings' => array(
+        'image_style' => 'medium',
+        'image_link' => '',
+      ),
+    ),
+  );
 }

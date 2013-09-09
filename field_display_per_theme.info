@@ -2,4 +2,6 @@ name = Field display per theme
 description = Enables a site admin to override the Manage Display configuration for any field on a per-theme basis.
 core = 7.x
 
-dependencies[] = field
+dependencies[] = field_ui
+
+files[] = field_display_per_theme.info.class.inc
