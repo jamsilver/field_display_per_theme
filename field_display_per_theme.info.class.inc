@@ -19,12 +19,20 @@
 class FieldDisplayPerThemeFieldInfo extends FieldInfo {
 
   protected $fieldDisplayPerThemeOverrides = array();
+  protected $fieldDisplayPerThemeViewMode = NULL;
 
   /**
    * Call this to set the field display overrides.
    */
   public function setDisplayOverrides($entity_type, $bundle, $view_mode, $overrides) {
     $this->fieldDisplayPerThemeOverrides[$entity_type][$bundle][$view_mode] = $overrides;
+  }
+
+  /**
+   * Call this to set the field display overrides.
+   */
+  public function setActiveViewMode($view_mode) {
+    $this->fieldDisplayPerThemeViewMode = $view_mode;
   }
 
   public function getInstances($entity_type = NULL) {
@@ -55,6 +63,39 @@ class FieldDisplayPerThemeFieldInfo extends FieldInfo {
   }
 
   protected function applyFieldInstanceOverrides($entity_type, $bundle, &$instance) {
+    // Make sure our 'active' view mode is present in the results.
+    // (This is so we can still access view modes UI to override them when they
+    // are not enabled by default).
+    if (isset($this->fieldDisplayPerThemeViewMode)) {
+      $view_mode = $this->fieldDisplayPerThemeViewMode;
+      if (!isset($instance['display'][$view_mode])) {
+        if (isset($instance['display']['default'])) {
+          $instance['display'][$view_mode] = $instance['display']['default'];
+        }
+        else {
+          $field_map = field_info_field_map();
+          if (isset($field_map[$instance['field_name']]['type'])) {
+            $field_type = $field_map[$instance['field_name']]['type'];
+            $field_type_info = field_info_field_types($field_type);
+            $instance['display'][$view_mode] =  array(
+              'label' => 'above',
+              'type' => $field_type_info['default_formatter'],
+              'settings' => array(),
+              'weight' => 0,
+            );
+          }
+          else {
+            $instance['display'][$view_mode] =  array(
+              'label' => 'hidden',
+              'type' => '',
+              'settings' => array(),
+              'weight' => 0,
+            );
+          }
+        }
+      }
+    }
+    // Now apply our overrides.
     if (isset($this->fieldDisplayPerThemeOverrides[$entity_type][$bundle])) {
       foreach ($this->fieldDisplayPerThemeOverrides[$entity_type][$bundle] as $view_mode => $fields) {
         foreach ($fields as $field_name => $display_override) {
